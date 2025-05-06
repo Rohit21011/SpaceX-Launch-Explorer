@@ -24,7 +24,7 @@ export const spacexApi = {
         {
           query: {
             ...(search && {
-              $or: [
+              $or: [  
                 { name: { $regex: search, $options: 'i' } },
                 { details: { $regex: search, $options: 'i' } }
               ]
