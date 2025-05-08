@@ -1,63 +1,81 @@
 import React, { useState, useEffect } from 'react';
 import {
-  TextInput,
-  Title,
-  Group,
-  Pagination,
-  Text,
+  Container,
   Box,
-  useMantineTheme,
-  Paper,
-  Select,
-  Table,
-  ScrollArea,
+  Group,
+  Title,
+  Card,
+  ActionIcon,
+  Tooltip,
+  LoadingOverlay,
+  Menu,
+  Button,
+  Text,
+  Badge,
+  Chip,
+  Divider,
 } from '@mantine/core';
-import { IconSearch, IconArrowUp, IconArrowDown } from '@tabler/icons-react';
+import {
+  IconRocket,
+  IconRefresh,
+  IconAdjustments,
+  IconLayoutList,
+  IconLayoutGrid,
+  IconArrowUp,
+  IconArrowDown,
+  IconX,
+} from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 import debounce from 'lodash/debounce';
 import { useDocumentTitle } from '@mantine/hooks';
 import { useNavigate } from 'react-router-dom';
 import { spacexApi } from '../api/spacex-api';
 import { Layout } from '../components/Layout';
-import { LaunchesResponse } from '../types';
-import { PAGE_SIZE } from '../utils/constant';
 import { ErrorFallback } from '../components/errorFallback';
 
-interface SortState {
-  field: string | null;
-  order: 'asc' | 'desc' | null;
-}
+import { PAGE_SIZE } from '../utils/constant';
+import { DataTable } from '../components/DataTable';
+import { EmptyState } from '../components/EmptyState';
+import { FilterTabs } from '../components/FilterTabs';
+import { GridView } from '../components/GridView';
+import { PaginationControls } from '../components/PaginationControls';
+import { SearchBar } from '../components/SearchBar';
+import { SortState, LaunchesResponse } from '../types';
+import { LaunchesListSkeleton } from '../components/LaunchesListSkeleton';
 
 export const LaunchesListPage: React.FC = () => {
-  useDocumentTitle('Launches');
-  const theme = useMantineTheme();
+  useDocumentTitle('SpaceX Launches Explorer');
   const navigate = useNavigate();
 
-  // State for search, filter, sort, and pagination
-  const [searchInput, setSearchInput] = useState<string>('');
-  const [search, setSearch] = useState<string>('');
-  const [successFilter, setSuccessFilter] = useState<string | null>('all');
-  const [sortState, setSortState] = useState<SortState>({ field: null, order: null });
-  const [page, setPage] = useState<number>(1);
-  const [pageSize, setPageSize] = useState<number>(PAGE_SIZE);
+  // State management
+  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState('');
+  const [successFilter, setSuccessFilter] = useState('all');
+  const [sortState, setSortState] = useState<SortState>({ field: 'date_utc', order: 'desc' });
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [activeTab, setActiveTab] = useState('all');
 
-  // Fetch launches with search, filter, sort, and pagination
-  const { 
-    data, 
-    isLoading, 
-    isError, 
-    error, 
-    refetch 
-  } = useQuery<LaunchesResponse, any>({
+  // Fetch launches
+  const {
+    data,
+    isLoading,
+    isError,
+    error,
+    refetch,
+    isFetching,
+  } = useQuery<LaunchesResponse, Error>({
     queryKey: ['launches', page, pageSize, search, successFilter, sortState],
-    queryFn: () => spacexApi.getLaunches({ 
-      page, 
-      limit: pageSize, 
-      search,
-      success: successFilter === 'all' ? undefined : successFilter === 'successful'?true:false,
-      sortField: sortState.field ?? undefined,
-      sortOrder: sortState.order ?? undefined,
-    }),
+    queryFn: () =>
+      spacexApi.getLaunches({
+        page,
+        limit: pageSize,
+        search,
+        success: successFilter === 'all' ? undefined : successFilter === 'successful',
+        sortField: sortState.field ?? undefined,
+        sortOrder: sortState.order ?? undefined,
+      }),
     keepPreviousData: true,
   });
 
@@ -78,17 +96,24 @@ export const LaunchesListPage: React.FC = () => {
   }, [searchInput, debouncedSearch]);
 
   // Event handlers
-  const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchInput(event.target.value);
+  const handleSearchChange = (value: string) => {
+    setSearchInput(value);
   };
 
-  const handleSuccessFilterChange = (value: string | null) => {
-    setSuccessFilter(value);
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    if (value === 'all') {
+      setSuccessFilter('all');
+    } else if (value === 'successful') {
+      setSuccessFilter('successful');
+    } else if (value === 'failed') {
+      setSuccessFilter('failed');
+    }
     setPage(1);
   };
 
   const handleSortChange = (field: string) => {
-    setSortState((prev) => {
+    setSortState((prev:SortState) => {
       if (prev.field === field && prev.order === 'asc') {
         return { field, order: 'desc' };
       } else if (prev.field === field && prev.order === 'desc') {
@@ -113,10 +138,12 @@ export const LaunchesListPage: React.FC = () => {
     navigate(`/launch/${id}`);
   };
 
-  // Render sort icon
-  const renderSortIcon = (field: string) => {
-    if (sortState.field !== field || !sortState.order) return null;
-    return sortState.order === 'asc' ? <IconArrowUp size={16} /> : <IconArrowDown size={16} />;
+  const handleResetFilters = () => {
+    setSearchInput('');
+    setSuccessFilter('all');
+    setSortState({ field: null, order: null });
+    setActiveTab('all');
+    setPage(1);
   };
 
   if (isError) {
@@ -126,112 +153,178 @@ export const LaunchesListPage: React.FC = () => {
       </Layout>
     );
   }
+  if(isLoading){
+    return <LaunchesListSkeleton viewMode={viewMode} />
+  }
 
   return (
-    <Layout loading={isLoading && !data}>
-      <Box mb="xl">
-        <Group position="apart" mb="lg">
-          <Title>SpaceX Launches</Title>
-          <Group>
-            <TextInput
-              placeholder="Search by name or details..."
-              icon={<IconSearch size={16} />}
-              value={searchInput}
-              onChange={handleSearchChange}
-              style={{ width: 300 }}
-            />
-            <Select
-           
-              value={successFilter}
-              onChange={handleSuccessFilterChange}
-              data={[
-                { value: 'all', label: 'All Launches' },
-                { value: 'successful', label: 'Successful' },
-                { value: 'failed', label: 'Failed' },
-              ]}
-              style={{ width: 150 }}
-            />
-          </Group>
-        </Group>
-
-        {data?.docs.length === 0 ? (
-          <Paper p="xl" withBorder>
-            <Text align="center">
-              No launches found{search ? ` matching "${search}"` : ''}
-              {successFilter !== 'all' ? ` with status "${successFilter}"` : ''}
-            </Text>
-          </Paper>
-        ) : (
-          <>
-            <ScrollArea>
-              <Table highlightOnHover verticalSpacing="sm">
-                <thead>
-                  <tr>
-                    <th>
-                      <Group spacing={4} style={{ cursor: 'pointer' }} onClick={() => handleSortChange('name')}>
-                        <Text>Name</Text>
-                        {renderSortIcon('name')}
-                      </Group>
-                    </th>
-                    <th>
-                      <Group spacing={4} style={{ cursor: 'pointer' }} onClick={() => handleSortChange('flight_number')}>
-                        <Text>Flight Number</Text>
-                        {renderSortIcon('flight_number')}
-                      </Group>
-                    </th>
-                    <th>
-                      <Group spacing={4} style={{ cursor: 'pointer' }} onClick={() => handleSortChange('date_utc')}>
-                        <Text>Date</Text>
-                        {renderSortIcon('date_utc')}
-                      </Group>
-                    </th>
-                    <th>Success</th>
-                    <th>Rocket</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data?.docs.map((launch) => (
-                    <tr 
-                      key={launch.id} 
-                      onClick={() => handleRowClick(launch.id)} 
-                      style={{ cursor: 'pointer' }}
-                    >
-                      <td>{launch.name || 'N/A'}</td>
-                      <td>{launch.flight_number || 'N/A'}</td>
-                      <td>{launch.date_utc ? new Date(launch.date_utc).toLocaleDateString() : 'N/A'}</td>
-                      <td>{launch.success !== null ? (launch.success ? 'Yes' : 'No') : 'N/A'}</td>
-                      <td>{launch.name || 'Unknown'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </Table>
-            </ScrollArea>
-
-            <Group position="apart" mt="xl">
-              <Group>
-                <Text size="sm">Show:</Text>
-                <Select
-                  value={String(pageSize)}
-                  onChange={handlePageSizeChange}
-                  data={[
-                    { value: '6', label: '6 per page' },
-                    { value: '10', label: '10 per page' },
-                    { value: '20', label: '20 per page' },
-                  ]}
-                  style={{ width: 120 }}
-                />
-              </Group>
-              
-              <Pagination
-                total={data?.totalPages || 1}
-                value={page}
-                onChange={handlePageChange}
-                withEdges
-              />
+    <Layout >
+      <Container size="xl" px="xs" >
+        <Box mb="xl" pos="relative">
+          
+          <Group position="apart" mb="lg" sx={{ transition: 'opacity 0.5s' }}>
+            <Group>
+              <IconRocket size={32} color="blue.6" />
+              <Title order={2}>SpaceX Launches Explorer</Title>
             </Group>
-          </>
-        )}
-      </Box>
+            <SearchBar value={searchInput} onChange={handleSearchChange} />
+          </Group>
+
+          <Card shadow="sm" p="md" radius="md" mb="lg" withBorder>
+            <Group position="apart">
+              <FilterTabs activeTab={activeTab} onTabChange={handleTabChange} />
+              <Group spacing="xs">
+                <Tooltip label="Refresh data">
+                  <ActionIcon
+                    variant="light"
+                    color="blue"
+                    onClick={() => refetch()}
+                    loading={isFetching && !isLoading}
+                    aria-label="Refresh launches"
+                  >
+                    <IconRefresh size={18} />
+                  </ActionIcon>
+                </Tooltip>
+                <Menu withinPortal position="bottom-end" shadow="md">
+                  <Menu.Target>
+                    <ActionIcon variant="light" color="gray" aria-label="Sort and page size options">
+                      <IconAdjustments size={18} />
+                    </ActionIcon>
+                  </Menu.Target>
+                  <Menu.Dropdown>
+                    <Menu.Label>Sort by</Menu.Label>
+                    <Menu.Item
+                      icon={
+                        sortState.field === 'name' && sortState.order === 'asc' ? (
+                          <IconArrowUp size={14} />
+                        ) : sortState.field === 'name' && sortState.order === 'desc' ? (
+                          <IconArrowDown size={14} />
+                        ) : null
+                      }
+                      onClick={() => handleSortChange('name')}
+                    >
+                      Mission Name
+                    </Menu.Item>
+                    <Menu.Item
+                      icon={
+                        sortState.field === 'flight_number' && sortState.order === 'asc' ? (
+                          <IconArrowUp size={14} />
+                        ) : sortState.field === 'flight_number' && sortState.order === 'desc' ? (
+                          <IconArrowDown size={14} />
+                        ) : null
+                      }
+                      onClick={() => handleSortChange('flight_number')}
+                    >
+                      Flight Number
+                    </Menu.Item>
+                    <Menu.Item
+                      icon={
+                        sortState.field === 'date_utc' && sortState.order === 'asc' ? (
+                          <IconArrowUp size={14} />
+                        ) : sortState.field === 'date_utc' && sortState.order === 'desc' ? (
+                          <IconArrowDown size={14} />
+                        ) : null
+                      }
+                      onClick={() => handleSortChange('date_utc')}
+                    >
+                      Launch Date
+                    </Menu.Item>
+                    <Divider />
+                    <Menu.Label>Items per page</Menu.Label>
+                    <Menu.Item onClick={() => handlePageSizeChange('6')}>6 per page</Menu.Item>
+                    <Menu.Item onClick={() => handlePageSizeChange('10')}>10 per page</Menu.Item>
+                    <Menu.Item onClick={() => handlePageSizeChange('20')}>20 per page</Menu.Item>
+                  </Menu.Dropdown>
+                </Menu>
+                <Group spacing={4}>
+                  <ActionIcon
+                    variant={viewMode === 'list' ? 'filled' : 'light'}
+                    color={viewMode === 'list' ? 'blue' : 'gray'}
+                    onClick={() => setViewMode('list')}
+                    aria-label="List view"
+                  >
+                    <IconLayoutList size={18} />
+                  </ActionIcon>
+                  <ActionIcon
+                    variant={viewMode === 'grid' ? 'filled' : 'light'}
+                    color={viewMode === 'grid' ? 'blue' : 'gray'}
+                    onClick={() => setViewMode('grid')}
+                    aria-label="Grid view"
+                  >
+                    <IconLayoutGrid size={18} />
+                  </ActionIcon>
+                </Group>
+              </Group>
+            </Group>
+          </Card>
+
+          {(search || successFilter !== 'all' || sortState.field) && (
+            <Group spacing="xs" mb="md">
+              <Text size="sm" color="dimmed">
+                Active filters:
+              </Text>
+              {search && (
+                <Badge
+                  variant="filled"
+                  size="lg"
+                  color="blue"
+                  rightSection={
+                    <ActionIcon size="xs" color="blue" onClick={() => setSearchInput('')} aria-label="Clear search filter">
+                      <IconX size={10} />
+                    </ActionIcon>
+                  }
+                >
+                  Search: {search}
+                </Badge>
+              )}
+              {successFilter !== 'all' && (
+                <Chip
+                  checked={true}
+                  variant="filled"
+                  size="xs"
+                  color={successFilter === 'successful' ? 'teal' : 'red'}
+                >
+                  Status: {successFilter}
+                </Chip>
+              )}
+              {sortState.field && (
+                <Chip checked={true} variant="filled" size="xs" color="blue">
+                  Sort: {sortState.field} ({sortState.order})
+                </Chip>
+              )}
+              <Button variant="subtle" compact onClick={handleResetFilters} aria-label="Clear all filters">
+                Clear all
+              </Button>
+            </Group>
+          )}
+
+          {data?.docs.length === 0 ? (
+            <EmptyState search={search} successFilter={successFilter} onReset={handleResetFilters} />
+          ) : (
+            <>
+              {viewMode === 'list' && (
+                <DataTable
+                  data={data?.docs || []}
+                  sortState={sortState}
+                  onSortChange={handleSortChange}
+                  onRowClick={handleRowClick}
+                  isLoading={isLoading}
+                />
+              )}
+              {viewMode === 'grid' && (
+                <GridView data={data?.docs || []} onRowClick={handleRowClick} isLoading={isLoading} />
+              )}
+              <PaginationControls
+                page={page}
+                pageSize={pageSize}
+                totalPages={data?.totalPages || 1}
+                totalDocs={data?.totalDocs || 0}
+                onPageChange={handlePageChange}
+              />
+            </>
+          )}
+        </Box>
+      </Container>
     </Layout>
   );
 };

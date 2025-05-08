@@ -8,7 +8,6 @@ export interface User {
     login: (userData: User, token: string) => void;
     logout: () => void;
   }
-  
   export interface Launch {
     id: string;
     name: string;
@@ -23,6 +22,17 @@ export interface User {
       }
     };
   }
+  export interface LaunchesResponse {
+    docs: Launch[];
+    totalDocs: number;
+    totalPages: number;
+  }
+  
+  export interface SortState {
+    field: string | null;
+    order: 'asc' | 'desc' | null;
+  }
+ 
   
   export interface Rocket {
     id: string;
@@ -59,3 +69,19 @@ export interface User {
     message: string;
     status?: number;
   }
+
+  export interface SortState {
+    field: string | null;
+    order: 'asc' | 'desc' | null;
+  }
+  export interface DataTableProps {
+    data: Launch[];
+    sortState: SortState;
+    onSortChange: (field: string) => void;
+    onRowClick: (id: string) => void;
+    isLoading: boolean;
+  }
+  
+export interface LaunchesListSkeletonProps {
+  viewMode: 'list' | 'grid';
+}

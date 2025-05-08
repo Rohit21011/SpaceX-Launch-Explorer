@@ -115,15 +115,7 @@ export const LoginPage: React.FC = () => {
               {...form.getInputProps('password')}
             />
             
-            <Group position="apart" mt="md">
-              <Anchor<'a'> 
-                onClick={(event) => event.preventDefault()}
-                href="#" 
-                size="sm"
-              >
-                Forgot password?
-              </Anchor>
-            </Group>
+      
             
             <Button 
               type="submit" 
